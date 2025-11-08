@@ -53,15 +53,7 @@ def search_issues(
     start_at: int = 0,
     fields: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """
-    Search Jira issues using a JQL query.
 
-    Args:
-        jql: JQL search string.
-        max_results: Max issues to return (default 50).
-        start_at: Pagination offset.
-        fields: Optional comma-separated list of fields to include.
-    """
     client = _get_client()
     return client.search(
         jql,
@@ -102,6 +94,8 @@ def create_issue(
     issue_type: str = "Task",
     description: Optional[str] = None,
     assignee_email: Optional[str] = None,
+    story_points: Optional[float] = None,
+    priority: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Create a Jira issue in the specified project.
@@ -118,6 +112,8 @@ def create_issue(
         issue_type=issue_type,
         description=description,
         assignee_email=assignee_email,
+        story_points=story_points,
+        priority=priority,
     )
 
 
@@ -135,6 +131,69 @@ def assign_issue(
         email=email,
     )
     return {"status": "ok", "issue": issue_key, "assigned_to": email}
+
+
+@app.tool
+def set_story_points(
+    issue_key: str,
+    story_points: float,
+) -> Dict[str, Any]:
+    """
+    Update an issue's story points.
+    """
+    client = _get_client()
+    client.set_story_points(issue_key, story_points)
+    return {"status": "ok", "issue": issue_key, "story_points": story_points}
+
+
+@app.tool
+def set_priority(
+    issue_key: str,
+    priority: str,
+) -> Dict[str, Any]:
+    """
+    Update an issue's priority by name.
+    """
+    client = _get_client()
+    client.set_priority(issue_key, priority)
+    return {"status": "ok", "issue": issue_key, "priority": priority}
+
+
+@app.tool
+def transition_issue(
+    issue_key: str,
+    target_status: str,
+) -> Dict[str, Any]:
+    """
+    Move an issue through the workflow to the target status.
+    """
+    client = _get_client()
+    return client.transition_issue(issue_key, target_status)
+
+
+@app.tool
+def story_points_summary(
+    sprint: Optional[str] = None,
+    project_key: Optional[str] = None,
+    jql: Optional[str] = None,
+    max_results: int = 500,
+) -> Dict[str, Any]:
+    """
+    Aggregate story points per assignee for a sprint or custom JQL.
+    """
+    client = _get_client()
+    if jql:
+        return client.story_points_by_jql(jql, max_results=max_results)
+    if sprint:
+        scoped_project = project_key or client.config.default_project
+        return client.story_points_by_sprint(
+            sprint,
+            project_key=scoped_project,
+            max_results=max_results,
+        )
+    raise RuntimeError("Provide either sprint or jql parameter.")
+
+
 
 
 if __name__ == "__main__":

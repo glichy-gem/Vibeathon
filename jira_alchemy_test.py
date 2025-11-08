@@ -61,10 +61,51 @@ def build_parser(default_project: Optional[str]) -> argparse.ArgumentParser:
         "--assignee-email",
         help="Email of the user to assign the issue to (will be looked up).",
     )
+    create_parser.add_argument(
+        "--story-points",
+        type=float,
+        help="Story points for the new issue.",
+    )
+    create_parser.add_argument(
+        "--priority",
+        help="Priority name for the new issue (e.g., High, Medium, Low).",
+    )
 
     assign_parser = subparsers.add_parser("assign", help="Assign an issue to a user.")
     assign_parser.add_argument("issue_key", help="Issue key to assign, e.g., SCRUM-1.")
     assign_parser.add_argument("--email", required=True, help="Email address of the assignee.")
+
+    estimate_parser = subparsers.add_parser("set-story-points", help="Update story points for an issue.")
+    estimate_parser.add_argument("issue_key", help="Issue key, e.g., SCRUM-1.")
+    estimate_parser.add_argument("story_points", type=float, help="New story points value.")
+
+    priority_parser = subparsers.add_parser("set-priority", help="Update priority for an issue.")
+    priority_parser.add_argument("issue_key", help="Issue key, e.g., SCRUM-1.")
+    priority_parser.add_argument("priority", help="Priority name, e.g., High.")
+
+    transition_parser = subparsers.add_parser("transition", help="Move an issue to a new status.")
+    transition_parser.add_argument("issue_key", help="Issue key, e.g., SCRUM-1.")
+    transition_parser.add_argument("status", help="Target status name, e.g., 'In Progress'.")
+
+    story_points_parser = subparsers.add_parser("story-points", help="Aggregate story points for a sprint or JQL.")
+    story_points_parser.add_argument(
+        "--sprint",
+        help='Sprint identifier or clause, e.g., "Sprint 1" or 45.',
+    )
+    story_points_parser.add_argument(
+        "--jql",
+        help="Custom JQL to aggregate story points (overrides --sprint).",
+    )
+    story_points_parser.add_argument(
+        "--project",
+        help="Project key to scope the sprint aggregation (defaults to configured project).",
+    )
+    story_points_parser.add_argument(
+        "--max-results",
+        type=int,
+        default=500,
+        help="Maximum issues to inspect (default: 500).",
+    )
 
     return parser
 
@@ -130,6 +171,8 @@ def main() -> None:
                 issue_type=args.type,
                 description=args.description,
                 assignee_email=args.assignee_email,
+                story_points=args.story_points,
+                priority=args.priority,
             )
             print("Issue created successfully!")
             print(json.dumps(issue, indent=2, sort_keys=True))
@@ -139,6 +182,29 @@ def main() -> None:
                 email=args.email,
             )
             print(f"Issue {args.issue_key} assigned successfully.")
+        elif args.command == "set-story-points":
+            client.set_story_points(args.issue_key, args.story_points)
+            print(f"Issue {args.issue_key} story points updated to {args.story_points}.")
+        elif args.command == "set-priority":
+            client.set_priority(args.issue_key, args.priority)
+            print(f"Issue {args.issue_key} priority updated to {args.priority}.")
+        elif args.command == "transition":
+            client.transition_issue(args.issue_key, args.status)
+            print(f"Issue {args.issue_key} moved to '{args.status}'.")
+        elif args.command == "story-points":
+            max_results = args.max_results
+            if args.jql:
+                result = client.story_points_by_jql(args.jql, max_results=max_results)
+            elif args.sprint:
+                project_scope = args.project or client.config.default_project
+                result = client.story_points_by_sprint(
+                    args.sprint,
+                    project_key=project_scope,
+                    max_results=max_results,
+                )
+            else:
+                raise ValueError("Provide --sprint or --jql to aggregate story points.")
+            print(json.dumps(result, indent=2, sort_keys=True))
         else:  # pragma: no cover
             parser.print_help()
             sys.exit(2)

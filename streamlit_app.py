@@ -75,6 +75,121 @@ if assign_submit:
 
 st.markdown("---")
 
+st.subheader("Move Issue Between Statuses")
+with st.form("transition_form", clear_on_submit=True):
+    transition_issue_key = st.text_input("Issue key", placeholder="SCRUM-1")
+    transition_status = st.selectbox(
+        "Target status",
+        ["To Do", "In Progress", "In Review", "Done"],
+    )
+    transition_submit = st.form_submit_button("Move Issue")
+
+if transition_submit:
+    if not transition_issue_key.strip():
+        st.warning("Issue key is required.")
+    else:
+        try:
+            with st.spinner(f"Moving {transition_issue_key} to {transition_status}..."):
+                client.transition_issue(
+                    transition_issue_key.strip(),
+                    transition_status,
+                )
+            st.success(f"Issue {transition_issue_key.strip()} moved to {transition_status}.")
+        except Exception as exc:
+            st.error(f"Failed to move issue: {exc}")
+
+st.markdown("---")
+
+st.subheader("Sprint Story Points")
+with st.form("sprint_story_points_form", clear_on_submit=True):
+    sprint_identifier = st.text_input("Sprint (name or ID)", placeholder="Sprint 1 or 45")
+    custom_jql = st.text_input(
+        "Custom JQL (optional)",
+        placeholder='sprint in openSprints() AND project = "SCRUM"',
+    )
+    limit_to_project = st.checkbox("Limit to configured project", value=True)
+    max_story_results = st.number_input(
+        "Max issues to inspect",
+        min_value=10,
+        max_value=1000,
+        value=200,
+        step=10,
+    )
+    sprint_story_submit = st.form_submit_button("Calculate Story Points")
+
+if sprint_story_submit:
+    try:
+        with st.spinner("Aggregating story points..."):
+            if custom_jql.strip():
+                result = client.story_points_by_jql(
+                    custom_jql.strip(),
+                    max_results=int(max_story_results),
+                )
+            elif sprint_identifier.strip():
+                result = client.story_points_by_sprint(
+                    sprint_identifier.strip(),
+                    project_key=active_project if limit_to_project else None,
+                    max_results=int(max_story_results),
+                )
+            else:
+                st.warning("Provide either a sprint identifier or a custom JQL query.")
+                result = None
+        if result:
+            members = result.get("members", [])
+            if not members:
+                st.info("No results found for the provided criteria.")
+            else:
+                st.write(f"JQL: `{result.get('jql')}`")
+                st.write(f"Total issues scanned: {result.get('totalIssues', 0)}")
+                for member in members:
+                    header = f"{member.get('displayName')} ({round(member.get('storyPoints', 0), 2)} pts)"
+                    with st.expander(header):
+                        st.write(f"**Email:** {member.get('emailAddress', 'N/A')}")
+                        st.write(f"**Estimated Issues:** {member.get('issueCount', 0)}")
+                        unestimated = member.get("unestimatedCount", 0)
+                        if unestimated:
+                            st.write(f"**Unestimated Issues:** {unestimated}")
+                        for issue in member.get("issues", []):
+                            st.write(
+                                f"- {issue.get('key')}: {issue.get('summary')} "
+                                f"(Story Points: {issue.get('storyPoints', '—')})"
+                            )
+                unassigned_info = result.get("unassigned")
+                if unassigned_info:
+                    with st.expander("Unassigned issues"):
+                        st.write(f"Story Points: {round(unassigned_info.get('storyPoints', 0), 2)}")
+                        st.write(f"Issue count: {unassigned_info.get('issueCount', 0)}")
+                        if unassigned_info.get("unestimatedCount"):
+                            st.write(f"Unestimated Issues: {unassigned_info.get('unestimatedCount', 0)}")
+                        for issue in unassigned_info.get("issues", []):
+                            st.write(
+                                f"- {issue.get('key')}: {issue.get('summary')} "
+                                f"(Story Points: {issue.get('storyPoints', '—')})"
+                            )
+    except Exception as exc:
+        st.error(f"Failed to aggregate story points: {exc}")
+
+st.markdown("---")
+
+st.subheader("Update Priority")
+with st.form("priority_form", clear_on_submit=True):
+    pr_issue_key = st.text_input("Issue key for priority", placeholder="SCRUM-1")
+    pr_value = st.selectbox(
+        "Priority",
+        ["Highest", "High", "Medium", "Low", "Lowest"],
+    )
+    pr_submit = st.form_submit_button("Update Priority")
+
+if pr_submit:
+    if not pr_issue_key.strip():
+        st.warning("Issue key is required.")
+    else:
+        with st.spinner(f"Updating priority for {pr_issue_key}..."):
+            client.set_priority(pr_issue_key.strip(), pr_value)
+        st.success(f"Updated priority for {pr_issue_key.strip()} to {pr_value}.")
+
+st.markdown("---")
+
 st.subheader("List Tasks")
 col_a, col_b, col_c = st.columns(3)
 with col_a:
@@ -117,6 +232,12 @@ with st.form("create_issue_form", clear_on_submit=True):
     issue_type = st.selectbox("Issue type", ["Task", "Bug", "Story"])
     description = st.text_area("Description", height=150)
     assignee_email = st.text_input("Assignee email (optional)")
+    story_points = st.number_input("Story points (optional)", min_value=0.0, step=0.5)
+    priority = st.selectbox(
+        "Priority (optional)",
+        ["", "Highest", "High", "Medium", "Low", "Lowest"],
+        index=0,
+    )
     submitted = st.form_submit_button("Create Jira Issue", type="primary")
 
 if submitted:
@@ -132,6 +253,8 @@ if submitted:
                 issue_type=issue_type,
                 description=description.strip() or None,
                 assignee_email=assignee_email.strip() or None,
+                story_points=story_points or None,
+                priority=priority or None,
             )
         st.success(f"Issue created: {issue.get('key')}")
         st.json(issue)
