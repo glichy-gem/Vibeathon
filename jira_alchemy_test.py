@@ -57,6 +57,14 @@ def build_parser(default_project: Optional[str]) -> argparse.ArgumentParser:
     create_parser.add_argument("--summary", required=True, help="Issue summary/title.")
     create_parser.add_argument("--type", default="Task", help='Issue type (default: "Task").')
     create_parser.add_argument("--description", help="Optional issue description.")
+    create_parser.add_argument(
+        "--assignee-email",
+        help="Email of the user to assign the issue to (will be looked up).",
+    )
+
+    assign_parser = subparsers.add_parser("assign", help="Assign an issue to a user.")
+    assign_parser.add_argument("issue_key", help="Issue key to assign, e.g., SCRUM-1.")
+    assign_parser.add_argument("--email", required=True, help="Email address of the assignee.")
 
     return parser
 
@@ -121,9 +129,16 @@ def main() -> None:
                 summary=args.summary,
                 issue_type=args.type,
                 description=args.description,
+                assignee_email=args.assignee_email,
             )
             print("Issue created successfully!")
             print(json.dumps(issue, indent=2, sort_keys=True))
+        elif args.command == "assign":
+            client.assign_issue(
+                args.issue_key,
+                email=args.email,
+            )
+            print(f"Issue {args.issue_key} assigned successfully.")
         else:  # pragma: no cover
             parser.print_help()
             sys.exit(2)

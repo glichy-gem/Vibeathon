@@ -3,10 +3,10 @@ from __future__ import annotations
 import json
 from typing import Any, Dict, Optional
 
-from fastmcp import FastMCP
-
 import os
 import sys
+
+from fastmcp import FastMCP
 
 CURRENT_DIR = os.path.dirname(__file__)
 PARENT_DIR = os.path.abspath(os.path.join(CURRENT_DIR, ".."))
@@ -101,6 +101,7 @@ def create_issue(
     summary: str,
     issue_type: str = "Task",
     description: Optional[str] = None,
+    assignee_email: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Create a Jira issue in the specified project.
@@ -116,7 +117,24 @@ def create_issue(
         summary=summary,
         issue_type=issue_type,
         description=description,
+        assignee_email=assignee_email,
     )
+
+
+@app.tool
+def assign_issue(
+    issue_key: str,
+    email: str,
+) -> Dict[str, Any]:
+    """
+    Assign a Jira issue to a user. Provide either account_id or email.
+    """
+    client = _get_client()
+    client.assign_issue(
+        issue_key,
+        email=email,
+    )
+    return {"status": "ok", "issue": issue_key, "assigned_to": email}
 
 
 if __name__ == "__main__":

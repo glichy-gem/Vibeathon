@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 import requests
 from dotenv import load_dotenv
@@ -165,6 +165,7 @@ class JiraClient:
         summary: str,
         issue_type: str = "Task",
         description: Optional[str] = None,
+        assignee_email: Optional[str] = None,
     ) -> Dict[str, Any]:
         payload: Dict[str, Any] = {
             "fields": {
@@ -176,12 +177,64 @@ class JiraClient:
         if description:
             payload["fields"]["description"] = self._make_adf_paragraph(description)
 
+        if assignee_email:
+            account_id = self._find_account_id_by_query(assignee_email)
+            if not account_id:
+                raise RuntimeError(
+                    f"Could not find a Jira user matching '{assignee_email}'."
+                )
+            payload["fields"]["assignee"] = {"accountId": account_id}
+
         return self._request(
             "POST",
             "/rest/api/3/issue",
             json_body=payload,
         ).json()
 
+    def assign_issue(
+        self,
+        issue_key: str,
+        *,
+        email: str,
+    ) -> None:
+        """
+        Assign an issue to a user.
+
+        Args:
+            issue_key: Jira issue key (e.g., SCRUM-1).
+            account_id: Atlassian accountId to assign. Required if email is not provided.
+            email: Convenience parameter; if provided, the first matching user's accountId
+                is used. Requires permissions to search users.
+        """
+        if not email:
+            raise ValueError("An email must be provided to assign an issue.")
+
+        target_account_id = self._find_account_id_by_query(email)
+        if not target_account_id:
+            raise RuntimeError(
+                f"Could not find a Jira user matching '{email}'."
+            )
+
+        self._request(
+            "PUT",
+            f"/rest/api/3/issue/{issue_key}/assignee",
+            json_body={"accountId": target_account_id},
+        )
+
+    def _find_account_id_by_query(self, query: str) -> Optional[str]:
+        """Return the first accountId that matches the given user search query."""
+        response = self._request(
+            "GET",
+            "/rest/api/3/user/search",
+            params={
+                "query": query,
+                "maxResults": 2,
+            },
+        )
+        users: List[Dict[str, Any]] = response.json()
+        if not users:
+            return None
+        return users[0].get("accountId")
 
 __all__ = [
     "JiraClient",

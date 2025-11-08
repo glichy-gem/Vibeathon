@@ -22,17 +22,12 @@ except JiraConfigError as exc:
     st.error(f"⚠️ Unable to load Jira credentials: {exc}")
     st.stop()
 
-with st.sidebar:
-    st.header("Settings")
-    default_project: Optional[str] = client.config.default_project
-    project_override = st.text_input(
-        "Project key",
-        value=default_project or "",
-        help="Leave blank to use the default from JIRA_DEFAULT_PROJECT.",
-    )
-    active_project = project_override or default_project
-    if not active_project:
-        st.warning("Set a project key here or via JIRA_DEFAULT_PROJECT to enable project-based tools.")
+active_project: Optional[str] = client.config.default_project
+if not active_project:
+    st.error("Set JIRA_DEFAULT_PROJECT in your environment to use this app.")
+    st.stop()
+
+st.caption(f"Active project: `{active_project}`")
 
 st.subheader("Verify Credentials")
 if st.button("Check Jira Connection", type="primary"):
@@ -56,6 +51,27 @@ with col2:
                 issue = client.get_issue(issue_key)
             st.success(f"Loaded issue {issue_key}")
             st.json(issue)
+
+st.markdown("---")
+
+st.subheader("Assign Issue")
+with st.form("assign_issue_form", clear_on_submit=True):
+    assign_issue_key = st.text_input("Issue key", placeholder="SCRUM-1")
+    assign_email = st.text_input("Assignee email")
+    assign_submit = st.form_submit_button("Assign")
+
+if assign_submit:
+    if not assign_issue_key.strip():
+        st.warning("Issue key is required.")
+    elif not assign_email.strip():
+        st.warning("Provide the assignee's email.")
+    else:
+        with st.spinner(f"Assigning {assign_issue_key}..."):
+            client.assign_issue(
+                assign_issue_key.strip(),
+                email=assign_email.strip(),
+            )
+        st.success(f"Issue {assign_issue_key.strip()} assigned successfully.")
 
 st.markdown("---")
 
@@ -95,13 +111,12 @@ if st.button("Refresh Task List", type="secondary"):
                     st.write(f"**Due:** {due_date}")
                     st.json(item)
 
-st.markdown("---")
-
 st.subheader("Create Issue")
 with st.form("create_issue_form", clear_on_submit=True):
     summary = st.text_input("Summary", placeholder="Fix login redirect")
     issue_type = st.selectbox("Issue type", ["Task", "Bug", "Story"])
     description = st.text_area("Description", height=150)
+    assignee_email = st.text_input("Assignee email (optional)")
     submitted = st.form_submit_button("Create Jira Issue", type="primary")
 
 if submitted:
@@ -116,6 +131,7 @@ if submitted:
                 summary=summary.strip(),
                 issue_type=issue_type,
                 description=description.strip() or None,
+                assignee_email=assignee_email.strip() or None,
             )
         st.success(f"Issue created: {issue.get('key')}")
         st.json(issue)
